@@ -81,8 +81,12 @@ func (d *LanZou) Link(ctx context.Context, file model.Obj, args model.LinkArgs) 
 			file.SetShareInfo(sfile)
 		}
 
-		// 然后获取下载链接
-		dfile, err = d.GetFilesByShareUrl(sfile.FID, sfile.Pwd)
+		// 然后获取下载链接。账户接口返回的 is_newd 是当前有效的分享域名。
+		shareURL := d.ShareUrl
+		if sfile.IsNewd != "" {
+			shareURL = sfile.IsNewd
+		}
+		dfile, err = d.getFilesByShareUrlAt(shareURL, sfile.FID, sfile.Pwd)
 		if err != nil {
 			return nil, err
 		}

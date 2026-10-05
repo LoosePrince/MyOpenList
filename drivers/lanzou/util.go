@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -90,7 +91,7 @@ func (d *LanZou) _post(url string, callback base.ReqCallback, resp interface{}, 
 		if info == "" {
 			info = utils.Json.Get(data, "info").ToString()
 		}
-		return data, fmt.Errorf(info)
+		return data, errors.New(info)
 	}
 }
 
@@ -310,20 +311,23 @@ var timeFindReg = regexp.MustCompile(`\d+\s*[秒天分小][钟时]?前|[昨前]�
 var findSubFolderReg = regexp.MustCompile(`(?i)(?:folderlink|mbxfolder).+href="/(.+?)"(?:.+filename")?>(.+?)<`)
 
 // 获取下载页面链接
-var findDownPageParamReg = regexp.MustCompile(`<iframe.*?src="(.+?)"`)
+var findDownPageParamReg = regexp.MustCompile(`(?is)<iframe[^>]+src=["']([^"']+)["']`)
 
 // 获取文件ID
-var findFileIDReg = regexp.MustCompile(`'/ajax(?:file|m)\.php\?file=(\d+)'`)
+var findFileIDReg = regexp.MustCompile(`(?i)["'](/ajax(?:file|m)\.php\?file=\d+[^"']*)["']`)
 
-// 2026-10 改版：文件页将下载参数移入 /fn? 内页，接口变为 apifile 绝对地址并携带签名
+// 2026-10 改版：文件页将下载参数移入 /fn? 内页，接口变为 apifile 绝对地址并携带签名。
+// 页面字段的引号和声明方式会变化，因此不要把它们限定为某一种 JS 写法。
 var (
-	fnDomainReg   = regexp.MustCompile(`var\s+domain[12]\s*=\s*'([^']*(?:ajaxfile|ajaxm)\.php\?file=(\d+)[^']*)'`)
-	fnSignReg     = regexp.MustCompile(`var\s+wp_sign\s*=\s*'([^']*)'`)
-	fnAjaxDataReg = regexp.MustCompile(`var\s+ajaxdata\s*=\s*'([^']*)'`)
+	fnDomainReg   = regexp.MustCompile(`(?is)(?:var|let|const)\s+domain[12]\s*=\s*(?:'([^']*(?:ajaxfile|ajaxm)\.php(?:\?[^']*)?)'|"([^"]*(?:ajaxfile|ajaxm)\.php(?:\?[^"]*)?)")`)
+	fnSignReg     = regexp.MustCompile(`(?is)(?:var|let|const)\s+wp_sign\s*=\s*(?:'([^']*)'|"([^"]*)")`)
+	fnAjaxDataReg = regexp.MustCompile(`(?is)(?:var|let|const)\s+ajaxdata\s*=\s*(?:'([^']*)'|"([^"]*)")`)
+	fnKDNSReg     = regexp.MustCompile(`(?is)(?:var|let|const)\s+kdns\s*=\s*(\d+)`)
 )
 
-// parseFnPage 从改版后的 /fn? 内页提取下载接口地址与签名表单
-// 对应页面 JS：POST domain1 {'action':'downprocess','websignkey':ajaxdata,'signs':ajaxdata,'sign':wp_sign,'websign':'2','kd':kdns,'ves':1}
+// parseFnPage 从改版后的 /fn? 内页提取下载接口地址与签名表单。
+// 对应页面 JS：POST domain1 {'action':'downprocess','websignkey':ajaxdata,
+// 'signs':ajaxdata,'sign':wp_sign,'websign':”,'kd':kdns,'ves':1}。
 func parseFnPage(pageData string) (string, map[string]string, error) {
 	matches := fnDomainReg.FindStringSubmatch(pageData)
 	if len(matches) < 3 {
@@ -331,25 +335,55 @@ func parseFnPage(pageData string) (string, map[string]string, error) {
 	}
 	sign := fnSignReg.FindStringSubmatch(pageData)
 	ajaxdata := fnAjaxDataReg.FindStringSubmatch(pageData)
-	if len(sign) < 2 || len(ajaxdata) < 2 {
+	if len(sign) < 3 || len(ajaxdata) < 3 {
 		return "", nil, fmt.Errorf("not find fn sign")
 	}
-	return matches[1], map[string]string{
+	kdns := "1"
+	if matches := fnKDNSReg.FindStringSubmatch(pageData); len(matches) >= 2 {
+		kdns = matches[1]
+	}
+	return firstNonEmpty(matches[1], matches[2]), map[string]string{
 		"action":     "downprocess",
-		"websignkey": ajaxdata[1],
-		"signs":      ajaxdata[1],
-		"sign":       sign[1],
-		"websign":    "2",
-		"kd":         "1",
+		"websignkey": firstNonEmpty(ajaxdata[1], ajaxdata[2]),
+		"signs":      firstNonEmpty(ajaxdata[1], ajaxdata[2]),
+		"sign":       firstNonEmpty(sign[1], sign[2]),
+		"websign":    "",
+		"kd":         kdns,
 		"ves":        "1",
 	}, nil
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func resolveSharePageURL(baseURL, pageURL string) string {
+	pageURLRef, err := url.Parse(pageURL)
+	if err != nil || pageURLRef.IsAbs() {
+		return pageURL
+	}
+	baseURLRef, err := url.Parse(baseURL)
+	if err != nil {
+		return pageURL
+	}
+	return baseURLRef.ResolveReference(pageURLRef).String()
+}
+
 // 获取分享链接主界面
 func (d *LanZou) getShareUrlHtml(shareID string) (string, error) {
+	return d.getShareUrlHtmlAt(d.ShareUrl, shareID)
+}
+
+func (d *LanZou) getShareUrlHtmlAt(shareURL, shareID string) (string, error) {
+	shareURL = strings.TrimRight(shareURL, "/")
 	var vs string
 	for i := 0; i < 3; i++ {
-		firstPageData, err := d.get(fmt.Sprint(d.ShareUrl, "/", shareID),
+		firstPageData, err := d.get(fmt.Sprint(shareURL, "/", shareID),
 			func(req *resty.Request) {
 				if vs != "" {
 					req.SetCookie(&http.Cookie{
@@ -399,7 +433,7 @@ func (d *LanZou) GetFileOrFolderByShareUrl(shareID, pwd string) ([]model.Obj, er
 			return &file
 		}), nil
 	} else {
-		file, err := d.getFilesByShareUrl(shareID, pwd, pageData)
+		file, err := d.getFilesByShareUrl(d.ShareUrl, shareID, pwd, pageData)
 		if err != nil {
 			return nil, err
 		}
@@ -411,14 +445,19 @@ func (d *LanZou) GetFileOrFolderByShareUrl(shareID, pwd string) ([]model.Obj, er
 // FileOrFolderByShareUrl 包含 pwd 和 url 字段
 // 参考 https://github.com/zaxtyson/LanZouCloud-API/blob/ab2e9ec715d1919bf432210fc16b91c6775fbb99/lanzou/api/core.py#L440
 func (d *LanZou) GetFilesByShareUrl(shareID, pwd string) (file *FileOrFolderByShareUrl, err error) {
-	pageData, err := d.getShareUrlHtml(shareID)
+	return d.getFilesByShareUrlAt(d.ShareUrl, shareID, pwd)
+}
+
+func (d *LanZou) getFilesByShareUrlAt(shareURL, shareID, pwd string) (file *FileOrFolderByShareUrl, err error) {
+	shareURL = strings.TrimRight(shareURL, "/")
+	pageData, err := d.getShareUrlHtmlAt(shareURL, shareID)
 	if err != nil {
 		return nil, err
 	}
-	return d.getFilesByShareUrl(shareID, pwd, pageData)
+	return d.getFilesByShareUrl(shareURL, shareID, pwd, pageData)
 }
 
-func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (*FileOrFolderByShareUrl, error) {
+func (d *LanZou) getFilesByShareUrl(shareURL, shareID, pwd string, sharePageData string) (*FileOrFolderByShareUrl, error) {
 	var (
 		param       map[string]string
 		downloadUrl string
@@ -446,7 +485,7 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 		if len(matches) < 2 {
 			return nil, fmt.Errorf("not find file id")
 		}
-		ajaxUrl := d.ShareUrl + matches[0][1:len(matches[0])-1]
+		ajaxUrl := resolveSharePageURL(shareURL, matches[1])
 		var resp FileShareInfoAndUrlResp[string]
 		_, err = d.post(ajaxUrl, func(req *resty.Request) { req.SetFormData(param) }, &resp)
 		if err != nil {
@@ -462,7 +501,7 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 			log.Errorf("lanzou: err => not find file page param ,data => %s\n", sharePageData)
 			return nil, fmt.Errorf("not find file page param")
 		}
-		data, err := d.get(fmt.Sprint(d.ShareUrl, urlpaths[1]), nil)
+		data, err := d.get(resolveSharePageURL(shareURL, urlpaths[1]), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -476,7 +515,7 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 			if err != nil {
 				return nil, err
 			}
-			ajaxUrl := d.ShareUrl + matches[0][1:len(matches[0])-1]
+			ajaxUrl := resolveSharePageURL(shareURL, matches[1])
 			_, err = d.post(ajaxUrl, func(req *resty.Request) { req.SetFormData(param) }, &resp)
 		} else if fnUrl, fnForm, ferr := parseFnPage(nextPageData); ferr == nil {
 			// 2026-10 改版结构：/fn? 内页携带 apifile 绝对地址与签名参数

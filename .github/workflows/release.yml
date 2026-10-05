@@ -67,7 +67,7 @@ jobs:
           bash build.sh release ${{ matrix.build-type == 'lite' && 'lite' || '' }} ${{ matrix.target-platform }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+          FRONTEND_REPO: ${{ github.repository }}
 
       - name: Upload assets
         env:

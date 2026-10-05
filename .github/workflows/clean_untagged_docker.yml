@@ -7,14 +7,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      package:
-        description: 'The name of the package to clean up'
-        required: true
-        default: 'openlist-git'
-      owner:
-        description: 'The owner of the package (user or organization)'
-        required: false
-        default: 'openlistteam'
       older_than:
         description: 'Delete untagged images older than this many days'
         required: false
@@ -41,11 +33,13 @@ jobs:
         id: setup
         shell: bash
         run: |
-          PACKAGE="${{ github.event.inputs.package || 'openlist-git' }}"
+          PACKAGE="${{ github.repository }}"
+          PACKAGE="${PACKAGE##*/}"
+          PACKAGE="${PACKAGE,,}"
+          OWNER="${GITHUB_REPOSITORY_OWNER}"
           OLDER="${{ github.event.inputs.older_than || '-1' }}"
           TOLERANCE_VAL="${{ github.event.inputs.untagged_timestamp_tolerance || '10000' }}"
           TOKEN_INPUT="${{ github.event.inputs.token || '' }}"
-          OWNER="${{ github.event.inputs.owner || 'openlistteam' }}"
 
           echo "package_name=$PACKAGE" >> "$GITHUB_OUTPUT"
           echo "older_than=$OLDER" >> "$GITHUB_OUTPUT"

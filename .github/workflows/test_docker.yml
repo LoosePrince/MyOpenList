@@ -57,7 +57,7 @@ jobs:
         run: bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ github.repository }}
+          FRONTEND_REPO: OpenListTeam/OpenList-Frontend
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

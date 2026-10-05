@@ -4,8 +4,8 @@ builtAt="$(date +'%F %T %z')"
 gitAuthor="The OpenList Projects Contributors <noreply@oplist.org>"
 gitCommit=$(git log --pretty=format:"%h" -1)
 
-# Use the current repository for release frontend assets unless explicitly overridden.
-frontendRepo="${FRONTEND_REPO:-${GITHUB_REPOSITORY:-LoosePrince/MyOpenList}}"
+# Frontend assets are published by the frontend repository and bundled into this build.
+frontendRepo="${FRONTEND_REPO:-OpenListTeam/OpenList-Frontend}"
 
 githubAuthArgs=""
 if [ -n "$GITHUB_TOKEN" ]; then

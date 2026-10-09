@@ -22,6 +22,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/pkg/errors"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
@@ -337,12 +338,6 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) (status i
 }
 
 func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) (status int, err error) {
-	defer func() {
-		if n, _ := io.ReadFull(r.Body, []byte{0}); n == 1 {
-			_, _ = utils.CopyWithBuffer(io.Discard, r.Body)
-		}
-		_ = r.Body.Close()
-	}()
 	reqPath, status, err := h.stripPrefix(r.URL.Path)
 	if err != nil {
 		return status, err
@@ -394,6 +389,24 @@ func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) (status int,
 	if !common.CanWrite(user, parentMeta, parentPath) {
 		return http.StatusForbidden, errs.PermissionDenied
 	}
+	storage, _, resolveErr := op.GetStorageAndActualPath(parentPath)
+	if resolveErr == nil && uploadproxy.Enabled(storage) {
+		info, issueErr := uploadproxy.Issue(uploadproxy.Request(reqPath, size, r.Header.Get("Content-Type"), "raw", "webdav", true))
+		if issueErr != nil {
+			return http.StatusBadRequest, issueErr
+		}
+		w.Header().Set("Location", info.UploadURL)
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+		return 0, nil
+	}
+	defer func() {
+		if n, _ := io.ReadFull(r.Body, []byte{0}); n == 1 {
+			_, _ = utils.CopyWithBuffer(io.Discard, r.Body)
+		}
+		_ = r.Body.Close()
+	}()
 	fsStream := &stream.FileStream{
 		Obj:      &obj,
 		Reader:   r.Body,

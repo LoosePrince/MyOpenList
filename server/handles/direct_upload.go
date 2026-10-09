@@ -9,6 +9,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -91,7 +92,20 @@ func FsGetDirectUploadInfo(c *gin.Context) {
 			return
 		}
 	}
-	directUploadInfo, err := fs.GetDirectUploadInfo(c, req.Tool, path, req.FileName, req.FileSize, overwrite)
+	storage, _, err := op.GetStorageAndActualPath(path)
+	if err != nil {
+		common.ErrorResp(c, err, 500)
+		return
+	}
+	var directUploadInfo any
+	if len(op.GetDirectUploadTools(storage)) == 0 && uploadproxy.Enabled(storage) {
+		directUploadInfo, err = uploadproxy.Issue(uploadproxy.Request(dstPath, req.FileSize, "application/octet-stream", "raw", "json", overwrite))
+		if info, ok := directUploadInfo.(*model.HttpDirectUploadInfo); ok {
+			info.Headers = map[string]string{"Content-Type": "application/octet-stream"}
+		}
+	} else {
+		directUploadInfo, err = fs.GetDirectUploadInfo(c, req.Tool, path, req.FileName, req.FileSize, overwrite)
+	}
 	if err != nil {
 		if !overwrite && errs.IsObjectAlreadyExists(err) {
 			common.ErrorStrResp(c, "file exists", 403)

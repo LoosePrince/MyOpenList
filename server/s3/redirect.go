@@ -12,6 +12,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/OpenListTeam/gofakes3/signature"
@@ -33,8 +34,53 @@ func redirectHandler(next http.Handler, authPairs map[string]string) http.Handle
 			w.WriteHeader(http.StatusTemporaryRedirect)
 			return
 		}
+		if proxyUploadRedirect(w, r, authPairs) {
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func proxyUploadRedirect(w http.ResponseWriter, r *http.Request, authPairs map[string]string) bool {
+	if (r.Method != http.MethodPut && r.Method != http.MethodPost) || !s3RequestAuthorized(r, authPairs) {
+		return false
+	}
+	bucketName, objectName, ok := parseObjectPath(r.URL.Path)
+	if !ok || strings.HasSuffix(objectName, "/") {
+		return false
+	}
+	bucket, err := getBucketByName(bucketName)
+	if err != nil {
+		return false
+	}
+	reqPath := path.Join(bucket.Path, objectName)
+	if !strings.HasPrefix(reqPath, strings.TrimRight(path.Clean(bucket.Path), "/")+"/") {
+		http.Error(w, "object path escapes bucket", http.StatusBadRequest)
+		return true
+	}
+	storage, _, err := op.GetStorageAndActualPath(path.Dir(reqPath))
+	if err != nil || !uploadproxy.Enabled(storage) {
+		return false
+	}
+	if hasNonObjectQuery(r) || r.Method != http.MethodPut || r.Header.Get("X-Amz-Copy-Source") != "" || strings.HasPrefix(r.Header.Get("X-Amz-Content-Sha256"), "STREAMING-") || strings.Contains(r.Header.Get("Content-Encoding"), "aws-chunked") {
+		http.Error(w, "upload proxy supports only single, unencoded PutObject requests", http.StatusNotImplemented)
+		return true
+	}
+	request := uploadproxy.Request(reqPath, r.ContentLength, r.Header.Get("Content-Type"), "raw", "s3", true)
+	request.ContentMD5 = r.Header.Get("Content-MD5")
+	if hash := r.Header.Get("X-Amz-Content-Sha256"); len(hash) == 64 {
+		request.ContentSHA256 = hash
+	}
+	info, err := uploadproxy.Issue(request)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return true
+	}
+	w.Header().Set("Location", info.UploadURL)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusTemporaryRedirect)
+	return true
 }
 
 func directObjectURL(r *http.Request, authPairs map[string]string) (string, bool) {

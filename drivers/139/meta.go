@@ -6,6 +6,7 @@ import (
 )
 
 type Addition struct {
+	driver.UploadProxy
 	//Account       string `json:"account" required:"true"`
 	Authorization string `json:"authorization" type:"text" help:"Authorization can be used alone. If empty, use username + password; mail_cookies is optional and will be established/updated automatically. Existing mail_cookies can also be used alone for fast login."`
 	Username      string `json:"username" help:"Use together with password when Authorization is empty. mail_cookies may be left empty on the first login."`

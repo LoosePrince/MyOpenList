@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/gofakes3"
 	log "github.com/sirupsen/logrus"
@@ -62,6 +64,11 @@ type multipartState struct {
 //
 // It implements gofakes3.MultipartBackend.
 func (b *s3Backend) CreateMultipartUpload(ctx context.Context, bucket, object string, meta map[string]string) (gofakes3.UploadID, error) {
+	if resolved, err := getBucketByName(bucket); err == nil {
+		if err = uploadproxy.RejectMultipart(path.Join(resolved.Path, object)); err != nil {
+			return "", gofakes3.ErrNotImplemented
+		}
+	}
 	if _, err := getBucketByName(bucket); err != nil {
 		return "", err
 	}

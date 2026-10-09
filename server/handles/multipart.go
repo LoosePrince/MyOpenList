@@ -14,6 +14,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/multipart"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
@@ -60,6 +61,10 @@ func MultipartInit(c *gin.Context) {
 	path, err = user.JoinPath(path)
 	if err != nil {
 		common.ErrorResp(c, err, 403)
+		return
+	}
+	if err = uploadproxy.RejectMultipart(path); err != nil {
+		common.ErrorResp(c, err, 405)
 		return
 	}
 	size, err := strconv.ParseInt(c.GetHeader("X-File-Size"), 10, 64)

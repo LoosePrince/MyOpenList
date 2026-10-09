@@ -189,6 +189,10 @@ func InitialSettings() []model.SettingItem {
 		{Key: conf.IgnoreSystemFiles, Value: "false", Type: conf.TypeBool, Group: model.GLOBAL, Flag: model.PRIVATE, Help: `When enabled, ignores common system files during upload (.DS_Store, desktop.ini, Thumbs.db, and files starting with ._)`},
 
 		// single settings
+		{Key: conf.UploadProxyEnabled, Value: "false", Type: conf.TypeBool, Group: model.SINGLE, Flag: model.PRIVATE, Help: "Enable external upload proxy interfaces"},
+		{Key: conf.UploadProxyExpiration, Value: "900", Type: conf.TypeNumber, Group: model.SINGLE, Flag: model.PRIVATE, Help: "Upload signature and session lifetime in seconds"},
+		{Key: conf.UploadProxyMaxSize, Value: "100", Type: conf.TypeNumber, Group: model.SINGLE, Flag: model.PRIVATE, Help: "Maximum single upload size in MiB"},
+		{Key: conf.UploadProxyBufferSize, Value: "32", Type: conf.TypeNumber, Group: model.SINGLE, Flag: model.PRIVATE, Help: "Worker buffer limit in MiB for hashing or incoming multipart forms; maximum 32"},
 		{Key: conf.Token, Value: token, Type: conf.TypeString, Group: model.SINGLE, Flag: model.PRIVATE},
 		{Key: conf.SearchIndex, Value: "none", Type: conf.TypeSelect, Options: "database,database_non_full_text,bleve,meilisearch,none", Group: model.INDEX},
 		{Key: conf.AutoUpdateIndex, Value: "false", Type: conf.TypeBool, Group: model.INDEX},

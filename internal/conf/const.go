@@ -59,6 +59,10 @@ const (
 	HandleHookAfterWriting  = "handle_hook_after_writing"
 	HandleHookRateLimit     = "handle_hook_rate_limit"
 	IgnoreSystemFiles       = "ignore_system_files"
+	UploadProxyEnabled      = "upload_proxy_enabled"
+	UploadProxyExpiration   = "upload_proxy_expiration"
+	UploadProxyMaxSize      = "upload_proxy_max_size"
+	UploadProxyBufferSize   = "upload_proxy_buffer_size"
 
 	// index
 	SearchIndex     = "search_index"

@@ -39,6 +39,9 @@ func shouldIgnoreSystemFile(filename string) bool {
 }
 
 func FsStream(c *gin.Context) {
+	if redirectUploadProxyPath(c, "raw") {
+		return
+	}
 	defer func() {
 		if n, _ := io.ReadFull(c.Request.Body, []byte{0}); n == 1 {
 			_, _ = utils.CopyWithBuffer(io.Discard, c.Request.Body)
@@ -128,6 +131,9 @@ func FsStream(c *gin.Context) {
 }
 
 func FsForm(c *gin.Context) {
+	if redirectUploadProxyPath(c, "form") {
+		return
+	}
 	defer func() {
 		if n, _ := io.ReadFull(c.Request.Body, []byte{0}); n == 1 {
 			_, _ = utils.CopyWithBuffer(io.Discard, c.Request.Body)

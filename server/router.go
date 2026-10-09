@@ -14,6 +14,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/server/static"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 func Init(e *gin.Engine) {
@@ -68,6 +69,13 @@ func Init(e *gin.Engine) {
 	g.HEAD("/sad/:sid/*path", middlewares.PathParse, middlewares.SharingIdParse, handles.SharingArchiveExtract)
 
 	api := g.Group("/api")
+	// Worker calls use the existing Token or explicitly enabled anonymous mode.
+	proxy := api.Group("/upload_proxy", func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 128<<10)
+	})
+	proxy.POST("/verify", handles.UploadProxyVerify)
+	proxy.POST("/prepare", handles.UploadProxyPrepare)
+	proxy.POST("/complete", handles.UploadProxyComplete)
 	auth := api.Group("", middlewares.Auth(false))
 	webauthn := api.Group("/authn", middlewares.Authn)
 

@@ -6,6 +6,7 @@ import (
 )
 
 type Addition struct {
+	driver.UploadProxy
 	Type string `json:"type" type:"select" options:"account,cookie,url" default:"cookie"`
 
 	Account  string `json:"account"`

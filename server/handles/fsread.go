@@ -13,6 +13,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
 	"github.com/OpenListTeam/OpenList/v4/internal/sign"
+	"github.com/OpenListTeam/OpenList/v4/internal/uploadproxy"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
@@ -112,6 +113,9 @@ func FsList(c *gin.Context, req *ListReq, user *model.User) {
 	if canWriteContentAtPath {
 		if storage, err := fs.GetStorage(reqPath, &fs.GetStoragesArgs{}); err == nil {
 			directUploadTools = op.GetDirectUploadTools(storage)
+			if len(directUploadTools) == 0 && uploadproxy.Enabled(storage) {
+				directUploadTools = []string{"HttpDirect"}
+			}
 		}
 	}
 	common.SuccessResp(c, FsListResp{

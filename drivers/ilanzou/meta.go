@@ -6,6 +6,7 @@ import (
 )
 
 type Addition struct {
+	driver.UploadProxy
 	driver.RootID
 	Username string `json:"username" type:"string" required:"true"`
 	Password string `json:"password" type:"string" required:"true"`

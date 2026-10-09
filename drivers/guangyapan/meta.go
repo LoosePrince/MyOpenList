@@ -6,6 +6,7 @@ import (
 )
 
 type Addition struct {
+	driver.UploadProxy
 	RootPath       string `json:"root_path" help:"Full path in GuangYaPan cloud drive"`
 	PhoneNumber    string `json:"phone_number" type:"text" help:"Phone number for SMS login, e.g. +86 13800000000"`
 	CaptchaToken   string `json:"captcha_token" help:"Captcha token required by /v1/auth/verification"`
